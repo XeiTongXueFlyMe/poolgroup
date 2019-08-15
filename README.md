@@ -9,8 +9,10 @@
 > 示例
 
 ```go
+import “github.com/XeiTongXueFlyMe/poolgroup”
+
 func main(){
-    g := NewErrGroup()
+    g := poolgroup.NewErrGroup()
     
     g.Go(func() error {
       time.Sleep(200 * time.Millisecond)
@@ -32,7 +34,53 @@ func main(){
 }
 ```
 
-> 测试用例
+### 并发一组协程,有一个协程退出,立即退出所有协程
+> 示例
+
+```go
+import “github.com/XeiTongXueFlyMe/poolgroup”
+
+func main(){
+    g := poolgroup.NewErrGroup()
+    g.WithContext(context.Background())
+    
+    g.Go(func() error {
+      time.Sleep(200 * time.Millisecond)
+      return errors.New("err")
+    })
+    g.Go(func() error {
+      time.Sleep(300 * time.Millisecond)
+      return nil
+    })
+    
+    g.Wait()
+}
+```
+
+### 并发一组协程,有一个协程退出或则超时,立即退出所有协程
+> 示例
+
+```go
+import “github.com/XeiTongXueFlyMe/poolgroup”
+
+func main(){
+    g := poolgroup.NewErrGroup()
+    g.WithTimeout(context.Background(), 1000*150) //150ms
+    
+    g.Go(func() error {
+      time.Sleep(200 * time.Millisecond)
+      return errors.New("err")
+    })
+    g.Go(func() error {
+      time.Sleep(300 * time.Millisecond)
+      return nil
+    })
+    
+    g.Wait()
+}
+```
+
+> 测试用例 并发一组协程,直到所有协程出错或者退出,才退出
 ```go
 func TestGroup(t *testing.T) {
 	counts, m := 0, sync.Mutex{}
@@ -62,28 +110,9 @@ func TestGroup(t *testing.T) {
 }
 ```
 
-### 并发一组协程,有一个协程退出,立即退出所有协程
-> 示例
 
-```go
-func main(){
-    g := NewErrGroup()
-    g.WithContext(context.Background())
-    
-    g.Go(func() error {
-      time.Sleep(200 * time.Millisecond)
-      return errors.New("err")
-    })
-    g.Go(func() error {
-      time.Sleep(300 * time.Millisecond)
-      return nil
-    })
-    
-    g.Wait()
-}
-```
 
-> 测试用例
+> 测试用例 并发一组协程,有一个协程退出,立即退出所有协程
 ```go
 func TestGroupWithContext(t *testing.T) {
 	counts, m := 0, sync.Mutex{}
@@ -121,28 +150,7 @@ func TestGroupWithContext(t *testing.T) {
 }
 ```
 
-### 并发一组协程,有一个协程退出或则超时,立即退出所有协程
-> 示例
-
-```go
-func main(){
-    g := NewErrGroup()
-    g.WithTimeout(context.Background(), 1000*150) //150ms
-    
-    g.Go(func() error {
-      time.Sleep(200 * time.Millisecond)
-      return errors.New("err")
-    })
-    g.Go(func() error {
-      time.Sleep(300 * time.Millisecond)
-      return nil
-    })
-    
-    g.Wait()
-}
-```
-
-> 测试用例
+> 测试用例 并发一组协程,有一个协程退出或则超时,立即退出所有协程
 ```go
 func TestGroupWithTimeout(t *testing.T) {
 	counts, m := 0, sync.Mutex{}
