@@ -6,6 +6,7 @@ import (
 	"time"
 )
 
+//TODO：做一个父亲群组
 type ErrGroup struct {
 	wg      sync.WaitGroup
 	counter uint64
@@ -57,6 +58,14 @@ func (g *ErrGroup) GetGoroutineNum() uint64 {
 	defer g.m.Unlock()
 
 	return g.counter
+}
+
+//only to WithContext()  WithTimeout()
+func (g *ErrGroup) Close() {
+	if g.ctx != nil {
+		g.Go(func() error { return nil })
+	}
+	return
 }
 
 func (g *ErrGroup) f(f func() error) {
