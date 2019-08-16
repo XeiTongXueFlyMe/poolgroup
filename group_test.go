@@ -9,10 +9,6 @@ import (
 	"time"
 )
 
-func f() {
-	panic("time out")
-}
-
 func TestGroup(t *testing.T) {
 	counts, m := 0, sync.Mutex{}
 

@@ -92,12 +92,6 @@ func (g *ErrGroup) fWithContext(f func() error) {
 		}
 	}()
 
-	select {
-	case <-(*g.ctx).Done():
-		return
-	default:
-	}
-
 	if err := f(); err != nil {
 		g.collectErrs(err)
 	}
