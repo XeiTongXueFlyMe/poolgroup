@@ -2,18 +2,22 @@ package poolgroup
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"sync"
 	"time"
 )
 
 //TODO：做一个父亲群组
+//TODO：支持回滚
+//TODO:阶段painc()
 type ErrGroup struct {
 	wg      sync.WaitGroup
 	counter uint64
 	ctx     *context.Context
 	m       sync.Mutex
 	errs    []error
-	cancel  func()
+	cancel  context.CancelFunc
 }
 
 func NewErrGroup() *ErrGroup {
@@ -47,7 +51,7 @@ func (g *ErrGroup) Go(f func() error) {
 	g.m.Unlock()
 
 	if g.ctx != nil {
-		g.fWithContext(f)
+		go g.fWithContext(f)
 	} else {
 		go g.f(f)
 	}
@@ -60,7 +64,7 @@ func (g *ErrGroup) GetGoroutineNum() uint64 {
 	return g.counter
 }
 
-//only to WithContext()  WithTimeout()
+//only to use WithContext()  WithTimeout()
 func (g *ErrGroup) Close() {
 	if g.ctx != nil {
 		g.Go(func() error { return nil })
@@ -70,19 +74,23 @@ func (g *ErrGroup) Close() {
 
 func (g *ErrGroup) f(f func() error) {
 	defer g.wg.Done()
+	defer func() {
+		if err := recover(); err != nil {
+			g.collectErrs(errors.New(fmt.Sprint(err)))
+		}
+	}()
 
 	if err := f(); err != nil {
-		g.m.Lock()
-		g.errs = append(g.errs, err)
-		g.m.Unlock()
-
-		if g.cancel != nil {
-			g.cancel()
-		}
+		g.collectErrs(err)
 	}
 }
 func (g *ErrGroup) fWithContext(f func() error) {
 	defer g.wg.Done()
+	defer func() {
+		if err := recover(); err != nil {
+			g.collectErrs(errors.New(fmt.Sprint(err)))
+		}
+	}()
 
 	select {
 	case <-(*g.ctx).Done():
@@ -91,12 +99,16 @@ func (g *ErrGroup) fWithContext(f func() error) {
 	}
 
 	if err := f(); err != nil {
-		g.m.Lock()
-		g.errs = append(g.errs, err)
-		g.m.Unlock()
+		g.collectErrs(err)
+	}
+}
 
-		if g.cancel != nil {
-			g.cancel()
-		}
+func (g *ErrGroup) collectErrs(err error) {
+	g.m.Lock()
+	defer g.m.Unlock()
+	g.errs = append(g.errs, err)
+
+	if g.cancel != nil {
+		g.cancel()
 	}
 }
