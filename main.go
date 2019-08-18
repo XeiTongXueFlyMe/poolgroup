@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"github.com/XeiTongXueFlyMe/poolgroup/group"
@@ -32,19 +31,41 @@ func example_1() {
 	fmt.Println(g.GetErrs())
 }
 
+//func main() {
+//	ctx := context.TODO()
+//	cc, c := context.WithCancel(ctx)
+//	ccc := cc
+//	go func() {
+//		<-cc.Done()
+//		fmt.Print("1")
+//	}()
+//	go func() {
+//		<-ccc.Done()
+//		fmt.Print("2")
+//	}()
+//
+//	c()
+//	time.Sleep(100 * time.Microsecond)
+//}
+
 func main() {
-	ctx := context.TODO()
-	cc, c := context.WithCancel(ctx)
-	ccc := cc
+	var rollback chan int
+	rollback = make(chan int, 3)
+	rollback <- 2
+	rollback <- 2
+	rollback <- 2
 	go func() {
-		<-cc.Done()
-		fmt.Print("1")
-	}()
-	go func() {
-		<-ccc.Done()
-		fmt.Print("2")
+		for {
+			select {
+			case <-rollback:
+				fmt.Println("rollback")
+				continue
+			default:
+				fmt.Println("default")
+			}
+			break
+		}
 	}()
 
-	c()
-	time.Sleep(100 * time.Microsecond)
+	time.Sleep(1000 * time.Second)
 }

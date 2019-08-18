@@ -8,26 +8,36 @@ import (
 	"time"
 )
 
-//TODO：支持回滚
+const (
+	ROLLBACK_MAXNUM     = 10000
+	GO_F_TYPE_ERR       = "g.Go(f): f.(type) is FAILURE"
+	FUNC_CALL_LOGIC_ERR = "err :calling Configure after calling g.Go()"
+	ROLLBACK_ERR        = "rollback ERR: "
+)
+
 type Group struct {
-	child   []*Group
-	isUsed  bool
-	wg      sync.WaitGroup
-	counter uint64
-	ctx     *context.Context
-	m       sync.Mutex
-	errs    []error
-	cancel  context.CancelFunc
+	child []*Group
+
+	isUsed     bool
+	counter    uint64
+	errs       []error
+	m          sync.Mutex
+	wg         sync.WaitGroup
+	ctx        *context.Context
+	cancel     context.CancelFunc
+	isRollback bool
+	rollback   chan func() error
 }
 
 func NewGroup() *Group {
-	return &Group{}
+	return &Group{rollback: make(chan func() error, ROLLBACK_MAXNUM)}
 }
 func (g *Group) ForkChild() *Group {
 	g.m.Lock()
 	defer g.m.Unlock()
 
-	child := &Group{ctx: g.ctx}
+	child := NewGroup()
+	child.ctx = g.ctx
 	g.child = append(g.child, child)
 
 	return child
@@ -57,20 +67,37 @@ func (g *Group) DiscardedContext() {
 	return
 }
 
-func (g *Group) Wait() []error {
+func (g *Group) Wait(isParentRollback ...interface{}) []error {
+	var err []error
+
+	for _, b := range isParentRollback {
+		switch t := b.(type) {
+		case bool:
+			g.isRollback = t
+		}
+	}
+	if len(g.errs) > 0 {
+		g.isRollback = true
+	}
+
 	for _, v := range g.child {
-		v.Wait()
+		e := v.Wait(g.isRollback)
+		err = append(err, e...)
 	}
 
 	g.wg.Wait()
 	if g.cancel != nil {
 		g.cancel()
 	}
-	return g.errs
+
+	if e := g.callRollback(); len(e) > 0 {
+		err = append(err, e...)
+	}
+
+	return append(err, g.errs...)
 }
 
-//如果这里出现panic ,注意 g.Go()带入参数 func(ctx context.Context) error  OR f.(func() error
-func (g *Group) Go(f interface{}) {
+func (g *Group) Go(f interface{}, rollback ...interface{}) error {
 	g.m.Lock()
 	g.isUsed = true
 	g.wg.Add(1)
@@ -78,10 +105,17 @@ func (g *Group) Go(f interface{}) {
 	g.m.Unlock()
 
 	if g.ctx != nil {
-		go g.fWithContext(f.(func(ctx context.Context) error))
+		if _, ok := f.(func(ctx context.Context) error); !ok {
+			return errors.New(GO_F_TYPE_ERR)
+		}
+		go g.fWithContext(f.(func(ctx context.Context) error), rollback...)
 	} else {
+		if _, ok := f.(func() error); !ok {
+			return errors.New(GO_F_TYPE_ERR)
+		}
 		go g.f(f.(func() error))
 	}
+	return nil
 }
 
 func (g *Group) GetGoroutineNum() uint64 {
@@ -129,8 +163,16 @@ func (g *Group) f(f func() error) {
 		g.collectErrs(e)
 	}
 }
-func (g *Group) fWithContext(f func(ctx context.Context) error) {
+func (g *Group) fWithContext(f func(ctx context.Context) error, rollback ...interface{}) {
 	defer g.wg.Done()
+	defer func() {
+		for _, v := range rollback {
+			f, ok := v.(func() error)
+			if ok {
+				g.rollback <- f
+			}
+		}
+	}()
 	defer func() {
 		if e := recover(); e != nil {
 			g.collectErrs(errors.New(fmt.Sprint(e)))
@@ -140,6 +182,7 @@ func (g *Group) fWithContext(f func(ctx context.Context) error) {
 	if e := f(*g.ctx); e != nil {
 		g.collectErrs(e)
 	}
+
 }
 
 func (g *Group) checkCallLogic() {
@@ -148,7 +191,7 @@ func (g *Group) checkCallLogic() {
 
 	//并发产生后，不能再配置Group
 	if g.isUsed {
-		panic("err :calling Configure after calling g.Go()")
+		panic(FUNC_CALL_LOGIC_ERR)
 	}
 }
 
@@ -160,4 +203,25 @@ func (g *Group) collectErrs(err error) {
 	if g.cancel != nil {
 		g.cancel()
 	}
+}
+
+//当并发线程某一个返回错误,或则panic时 执行回滚
+//父亲组产生回滚,子组树全部产生回滚
+//子组产生回滚，其父不受影响
+func (g *Group) callRollback() []error {
+	var err []error
+	if g.isRollback {
+		for {
+			select {
+			case f := <-g.rollback:
+				if e := f(); e != nil {
+					err = append(err, errors.New(fmt.Sprintln(ROLLBACK_ERR, e)))
+				}
+				continue
+			default:
+			}
+			break
+		}
+	}
+	return err
 }
