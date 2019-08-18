@@ -41,10 +41,10 @@ func (g *Group) WithContext(ctx context.Context) (c context.Context) {
 	return
 }
 
-func (g *Group) WithTimeout(ctx context.Context, microSecond time.Duration) (c context.Context) {
+func (g *Group) WithTimeout(ctx context.Context, timeout time.Duration) (c context.Context) {
 	g.checkCallLogic()
 
-	c, g.cancel = context.WithTimeout(ctx, microSecond*time.Microsecond)
+	c, g.cancel = context.WithTimeout(ctx, timeout)
 	g.ctx = &c
 	return
 }
@@ -69,6 +69,7 @@ func (g *Group) Wait() []error {
 	return g.errs
 }
 
+//如果这里出现panic ,注意 g.Go()带入参数 func(ctx context.Context) error  OR f.(func() error
 func (g *Group) Go(f interface{}) {
 	g.m.Lock()
 	g.isUsed = true
