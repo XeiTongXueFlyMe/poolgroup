@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"github.com/stretchr/testify/assert"
+	"runtime"
 	"sync"
 	"testing"
 	"time"
@@ -91,6 +92,14 @@ func (this *class) funcA() error {
 
 	return nil
 }
+func (this *class) funcResetA() error {
+	time.Sleep(200 * time.Millisecond)
+	this.m.Lock()
+	defer this.m.Unlock()
+	this.a = 0
+
+	return nil
+}
 func (this *class) funcAA() error {
 	time.Sleep(200 * time.Millisecond)
 	this.m.Lock()
@@ -107,11 +116,27 @@ func (this *class) funcB() error {
 
 	return nil
 }
+func (this *class) funcResetB() error {
+	time.Sleep(200 * time.Millisecond)
+	this.m.Lock()
+	defer this.m.Unlock()
+	this.b = 0
+
+	return nil
+}
 func (this *class) funcC() error {
 	time.Sleep(100 * time.Millisecond)
 	this.m.Lock()
 	defer this.m.Unlock()
 	this.c++
+
+	return nil
+}
+func (this *class) funcResetC() error {
+	time.Sleep(200 * time.Millisecond)
+	this.m.Lock()
+	defer this.m.Unlock()
+	this.c = 0
 
 	return nil
 }
@@ -323,4 +348,125 @@ func TestGroupGetErrs(t *testing.T) {
 
 	g.Wait()
 	assert.EqualValues(t, g.GetErrs(), err)
+}
+
+func TestGroupRollback_1(t *testing.T) {
+	f := class{}
+
+	g := NewGroup()
+	g.WithContext(context.TODO())
+	assert.NoError(t, g.Go(f.funcCtxA))
+	assert.NoError(t, g.Go(f.funcCtxA, f.funcResetA))
+	assert.NoError(t, g.Go(f.funcCtxB))
+	assert.NoError(t, g.Go(f.funcCtxC, f.funcResetC))
+	assert.NoError(t, g.Go(f.funcTimeOut))
+
+	g.Wait()
+	assert.EqualValues(t, 0, f.a)
+	assert.EqualValues(t, 1, f.b)
+	assert.EqualValues(t, 0, f.c)
+}
+
+func TestGroupRollback_2(t *testing.T) {
+	f := class{}
+
+	g := NewGroup()
+	g.WithContext(context.TODO())
+	assert.NoError(t, g.Go(f.funcCtxA))
+	assert.NoError(t, g.Go(f.funcCtxA))
+	assert.NoError(t, g.Go(f.funcCtxB))
+	assert.NoError(t, g.Go(f.funcCtxC))
+	assert.NoError(t, g.Go(f.funcTimeOut))
+
+	A := g.ForkChild()
+	assert.NoError(t, A.Go(f.funcCtxA))
+	assert.NoError(t, A.Go(f.funcCtxA))
+	assert.NoError(t, A.Go(f.funcCtxB))
+	assert.NoError(t, A.Go(f.funcCtxC))
+
+	a := A.ForkChild()
+	assert.NoError(t, a.Go(f.funcCtxA))
+	assert.NoError(t, a.Go(f.funcCtxA, f.funcResetA))
+	assert.NoError(t, a.Go(f.funcCtxC))
+
+	aa := a.ForkChild()
+	assert.NoError(t, aa.Go(f.funcCtxA))
+	assert.NoError(t, aa.Go(f.funcCtxA))
+	assert.NoError(t, aa.Go(f.funcCtxC, f.funcResetC))
+
+	g.Wait()
+	assert.EqualValues(t, 0, f.a)
+	assert.EqualValues(t, 2, f.b)
+	assert.EqualValues(t, 0, f.c)
+}
+
+func TestGroupRollback_3(t *testing.T) {
+	f := class{}
+
+	g := NewGroup()
+	g.WithContext(context.TODO())
+	assert.NoError(t, g.Go(f.funcCtxA))
+	assert.NoError(t, g.Go(f.funcCtxA))
+	assert.NoError(t, g.Go(f.funcCtxB, f.funcResetB))
+	assert.NoError(t, g.Go(f.funcCtxC))
+
+	A := g.ForkChild()
+	assert.NoError(t, A.Go(f.funcCtxA))
+	assert.NoError(t, A.Go(f.funcCtxA))
+	assert.NoError(t, A.Go(f.funcCtxB, f.funcResetB))
+	assert.NoError(t, A.Go(f.funcCtxC))
+
+	a := A.ForkChild()
+	assert.NoError(t, a.Go(f.funcCtxA))
+	assert.NoError(t, a.Go(f.funcCtxA))
+	assert.NoError(t, a.Go(f.funcCtxC, f.funcResetC))
+	assert.NoError(t, a.Go(f.funcTimeOut))
+
+	aa := a.ForkChild()
+	assert.NoError(t, aa.Go(f.funcCtxA))
+	assert.NoError(t, aa.Go(f.funcCtxA, f.funcResetA))
+	assert.NoError(t, aa.Go(f.funcCtxC))
+
+	time.Sleep(310 * time.Millisecond)
+	runtime.Gosched()
+	g.Close()
+	A.Close()
+	a.Close()
+	aa.Close()
+
+	g.Wait()
+	assert.EqualValues(t, 0, f.a)
+	assert.EqualValues(t, 2, f.b)
+	assert.EqualValues(t, 0, f.c)
+}
+
+func TestGroupRollback_4(t *testing.T) {
+	f := class{}
+
+	g := NewGroup()
+	g.WithContext(context.TODO())
+	assert.NoError(t, g.Go(f.funcCtxA))
+	assert.NoError(t, g.Go(f.funcCtxB))
+	assert.NoError(t, g.Go(f.funcCtxC))
+	assert.NoError(t, g.Go(f.funcTimeOut))
+
+	A := g.ForkChild()
+	A.DiscardedContext()
+	assert.NoError(t, A.Go(f.funcA))
+	assert.NoError(t, A.Go(f.funcB))
+	assert.NoError(t, A.Go(f.funcC))
+
+	a := A.ForkChild()
+	a.WithContext(context.TODO())
+	assert.NoError(t, a.Go(f.funcCtxA))
+	assert.NoError(t, a.Go(f.funcCtxA, f.funcResetA))
+	assert.NoError(t, a.Go(f.funcCtxC, f.funcResetC))
+
+	time.Sleep(310 * time.Millisecond)
+	runtime.Gosched()
+	a.Close()
+	g.Wait()
+	assert.EqualValues(t, 4, f.a)
+	assert.EqualValues(t, 2, f.b)
+	assert.EqualValues(t, 3, f.c)
 }

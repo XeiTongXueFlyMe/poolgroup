@@ -38,6 +38,7 @@ func (g *Group) ForkChild() *Group {
 
 	child := NewGroup()
 	child.ctx = g.ctx
+	child.cancel = g.cancel
 	g.child = append(g.child, child)
 
 	return child
@@ -73,21 +74,23 @@ func (g *Group) Wait(isParentRollback ...interface{}) []error {
 	for _, b := range isParentRollback {
 		switch t := b.(type) {
 		case bool:
-			g.isRollback = t
+			if g.ctx != nil {
+				g.isRollback = t
+			}
 		}
 	}
-	if len(g.errs) > 0 {
+
+	if g.wg.Wait(); g.cancel != nil {
+		g.cancel()
+	}
+
+	if (len(g.errs) > 0) && (g.ctx != nil) {
 		g.isRollback = true
 	}
 
 	for _, v := range g.child {
 		e := v.Wait(g.isRollback)
 		err = append(err, e...)
-	}
-
-	g.wg.Wait()
-	if g.cancel != nil {
-		g.cancel()
 	}
 
 	if e := g.callRollback(); len(e) > 0 {
@@ -144,7 +147,7 @@ func (g *Group) GetErrs() []error {
 
 //only to use WithContext()  WithTimeout()
 func (g *Group) Close() {
-	if g.ctx != nil {
+	if (g.ctx != nil) && (g.cancel != nil) {
 		g.cancel()
 	}
 	return
@@ -206,8 +209,8 @@ func (g *Group) collectErrs(err error) {
 }
 
 //当并发线程某一个返回错误,或则panic时 执行回滚
-//父亲组产生回滚,子组树全部产生回滚
-//子组产生回滚，其父不受影响
+//父亲组产生回滚,子组树全部产生回滚,不带上下文的节点及派生的子树不回滚
+//子组产生回滚，其父不回滚
 func (g *Group) callRollback() []error {
 	var err []error
 	if g.isRollback {
