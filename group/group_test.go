@@ -13,27 +13,27 @@ func TestGroup(t *testing.T) {
 	counts, m := 0, sync.Mutex{}
 
 	g := NewGroup()
-	g.Go(func() error {
+	assert.NoError(t, g.Go(func() error {
 		time.Sleep(100 * time.Millisecond)
 		m.Lock()
 		defer m.Unlock()
 		counts++
 		return errors.New("err")
-	})
-	g.Go(func() error {
+	}))
+	assert.NoError(t, g.Go(func() error {
 		time.Sleep(200 * time.Millisecond)
 		m.Lock()
 		defer m.Unlock()
 		counts++
 		return nil
-	})
-	g.Go(func() error {
+	}))
+	assert.NoError(t, g.Go(func() error {
 		time.Sleep(300 * time.Millisecond)
 		m.Lock()
 		defer m.Unlock()
 		counts++
 		return errors.New("err")
-	})
+	}))
 	g.Wait()
 	for _, err := range g.errs {
 		assert.Error(t, err)
@@ -46,28 +46,28 @@ func TestGroupPanic(t *testing.T) {
 	counts, m := 0, sync.Mutex{}
 
 	g := NewGroup()
-	g.Go(func() error {
+	assert.NoError(t, g.Go(func() error {
 		time.Sleep(100 * time.Millisecond)
 		m.Lock()
 		defer m.Unlock()
 		counts++
 		return errors.New("err")
-	})
-	g.Go(func() error {
+	}))
+	assert.NoError(t, g.Go(func() error {
 		time.Sleep(200 * time.Millisecond)
 		m.Lock()
 		defer m.Unlock()
 		counts++
 		panic("panic")
 		return nil
-	})
-	g.Go(func() error {
+	}))
+	assert.NoError(t, g.Go(func() error {
 		time.Sleep(300 * time.Millisecond)
 		m.Lock()
 		defer m.Unlock()
 		counts++
 		return errors.New("err")
-	})
+	}))
 	g.Wait()
 	for _, err := range g.errs {
 		assert.Error(t, err)
@@ -166,30 +166,30 @@ func TestGroupWait(t *testing.T) {
 	f := class{}
 
 	g := NewGroup()
-	g.Go(f.funcA)
-	g.Go(f.funcB)
-	g.Go(f.funcC)
+	assert.NoError(t, g.Go(f.funcA))
+	assert.NoError(t, g.Go(f.funcB))
+	assert.NoError(t, g.Go(f.funcC))
 
 	A := g.ForkChild()
-	A.Go(f.funcB)
-	A.Go(f.funcC)
+	assert.NoError(t, A.Go(f.funcB))
+	assert.NoError(t, A.Go(f.funcC))
 
 	B := g.ForkChild()
 	B.WithContext(context.TODO())
-	B.Go(f.funcCtxA)
-	B.Go(f.funcCtxC)
-	B.Go(f.funcCtxC)
-	B.Go(f.funcTimeOut)
+	assert.NoError(t, B.Go(f.funcCtxA))
+	assert.NoError(t, B.Go(f.funcCtxC))
+	assert.NoError(t, B.Go(f.funcCtxC))
+	assert.NoError(t, B.Go(f.funcTimeOut))
 
 	a := B.ForkChild()
-	a.Go(f.funcCtxA)
-	a.Go(f.funcCtxC)
-	a.Go(f.funcCtxC)
-	a.Go(f.funcTimeOut)
+	assert.NoError(t, a.Go(f.funcCtxA))
+	assert.NoError(t, a.Go(f.funcCtxC))
+	assert.NoError(t, a.Go(f.funcCtxC))
+	assert.NoError(t, a.Go(f.funcTimeOut))
 
 	b := A.ForkChild()
-	b.Go(f.funcB)
-	b.Go(f.funcC)
+	assert.NoError(t, b.Go(f.funcB))
+	assert.NoError(t, b.Go(f.funcC))
 
 	g.Wait()
 	assert.EqualValues(t, 3, f.a)
@@ -202,12 +202,12 @@ func TestGroupDiscardedContext(t *testing.T) {
 
 	g := NewGroup()
 	g.WithContext(context.Background())
-	g.Go(f.funcCtxA)
-	g.Go(f.funcTimeOut)
+	assert.NoError(t, g.Go(f.funcCtxA))
+	assert.NoError(t, g.Go(f.funcTimeOut))
 
 	A := g.ForkChild()
 	A.DiscardedContext()
-	A.Go(f.funcA)
+	assert.NoError(t, A.Go(f.funcA))
 
 	g.Wait()
 
@@ -220,11 +220,11 @@ func TestGroupTimeout(t *testing.T) {
 
 	g := NewGroup()
 	g.WithTimeout(context.Background(), 100*time.Millisecond)
-	g.Go(f.funcCtxA)
+	assert.NoError(t, g.Go(f.funcCtxA))
 
 	A := g.ForkChild()
 	A.DiscardedContext()
-	A.Go(f.funcA)
+	assert.NoError(t, A.Go(f.funcA))
 
 	g.Wait()
 
@@ -237,15 +237,15 @@ func TestGroupClose(t *testing.T) {
 
 	g := NewGroup()
 	g.WithContext(context.TODO())
-	g.Go(f.funcCtxA)
+	assert.NoError(t, g.Go(f.funcCtxA))
 
 	A := g.ForkChild()
-	A.Go(f.funcCtxA)
-	A.Go(f.funcCtxB)
+	assert.NoError(t, A.Go(f.funcCtxA))
+	assert.NoError(t, A.Go(f.funcCtxB))
 
 	a := A.ForkChild()
 	a.DiscardedContext()
-	a.Go(f.funcAA)
+	assert.NoError(t, a.Go(f.funcAA))
 
 	g.Close()
 	g.Wait()
@@ -258,30 +258,30 @@ func TestGroupGoroutineNum(t *testing.T) {
 	f := class{}
 
 	g := NewGroup()
-	g.Go(f.funcA)
-	g.Go(f.funcB)
-	g.Go(f.funcC)
+	assert.NoError(t, g.Go(f.funcA))
+	assert.NoError(t, g.Go(f.funcB))
+	assert.NoError(t, g.Go(f.funcC))
 
 	A := g.ForkChild()
-	A.Go(f.funcB)
-	A.Go(f.funcC)
+	assert.NoError(t, A.Go(f.funcB))
+	assert.NoError(t, A.Go(f.funcC))
 
 	B := g.ForkChild()
 	B.WithContext(context.TODO())
-	B.Go(f.funcCtxA)
-	B.Go(f.funcCtxC)
-	B.Go(f.funcCtxC)
-	B.Go(f.funcTimeOut)
+	assert.NoError(t, B.Go(f.funcCtxA))
+	assert.NoError(t, B.Go(f.funcCtxC))
+	assert.NoError(t, B.Go(f.funcCtxC))
+	assert.NoError(t, B.Go(f.funcTimeOut))
 
 	a := B.ForkChild()
-	a.Go(f.funcCtxA)
-	a.Go(f.funcCtxC)
-	a.Go(f.funcCtxC)
-	a.Go(f.funcTimeOut)
+	assert.NoError(t, a.Go(f.funcCtxA))
+	assert.NoError(t, a.Go(f.funcCtxC))
+	assert.NoError(t, a.Go(f.funcCtxC))
+	assert.NoError(t, a.Go(f.funcTimeOut))
 
 	b := A.ForkChild()
-	b.Go(f.funcB)
-	b.Go(f.funcC)
+	assert.NoError(t, b.Go(f.funcB))
+	assert.NoError(t, b.Go(f.funcC))
 
 	g.Wait()
 	assert.EqualValues(t, 15, g.GetGoroutineNum())
@@ -296,30 +296,30 @@ func TestGroupGetErrs(t *testing.T) {
 	f := class{}
 
 	g := NewGroup()
-	g.Go(f.funcA)
-	g.Go(f.funcB)
-	g.Go(f.funcC)
+	assert.NoError(t, g.Go(f.funcA))
+	assert.NoError(t, g.Go(f.funcB))
+	assert.NoError(t, g.Go(f.funcC))
 
 	A := g.ForkChild()
-	A.Go(f.funcB)
-	A.Go(f.funcC)
+	assert.NoError(t, A.Go(f.funcB))
+	assert.NoError(t, A.Go(f.funcC))
 
 	B := g.ForkChild()
 	B.WithContext(context.TODO())
-	B.Go(f.funcCtxA)
-	B.Go(f.funcCtxC)
-	B.Go(f.funcCtxC)
-	B.Go(f.funcTimeOut)
+	assert.NoError(t, B.Go(f.funcCtxA))
+	assert.NoError(t, B.Go(f.funcCtxC))
+	assert.NoError(t, B.Go(f.funcCtxC))
+	assert.NoError(t, B.Go(f.funcTimeOut))
 
 	a := B.ForkChild()
-	a.Go(f.funcCtxA)
-	a.Go(f.funcCtxC)
-	a.Go(f.funcCtxC)
-	a.Go(f.funcTimeOut)
+	assert.NoError(t, a.Go(f.funcCtxA))
+	assert.NoError(t, a.Go(f.funcCtxC))
+	assert.NoError(t, a.Go(f.funcCtxC))
+	assert.NoError(t, a.Go(f.funcTimeOut))
 
 	b := A.ForkChild()
-	b.Go(f.funcB)
-	b.Go(f.funcC)
+	assert.NoError(t, b.Go(f.funcB))
+	assert.NoError(t, b.Go(f.funcC))
 
 	g.Wait()
 	assert.EqualValues(t, g.GetErrs(), err)
