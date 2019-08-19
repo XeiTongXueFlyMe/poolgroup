@@ -258,3 +258,44 @@ func main() {
     return nil
 }
 ```
+
+### 自由组合和派生，需要注意什么
+* group 分为两种： 独立组（.(func() error) ）上下文组（.(func(ctx context.Context) error)）
+* 先调用g.WithContext()等组配置属性接口，在调用g.Go()。否则会panic
+* 配置接口 g.WithContext()  g.WithTimeout()  g.DiscardedContext()
+* g.Go() 正确调用方式， err : = g.Go(f) , 如果f入口函数格式错误，g.Go()会返回错误。如果你肯定f格式是正确的可以不用接收处理err
+* 子组会继承父组的属性（独立组 or 上下文组）,配置接口可以改变这个属性
+```go
+func main() {
+    c := calc{value: 0}
+    
+    g := group.NewGroup()
+    g.WithContext(context.TODO())
+    //...
+    
+    A := g.ForkChild()
+    A.DiscardedContext()
+    //...
+    B := g.ForkChild()
+    //...
+    
+    aa := A.ForkChild()
+    //...
+    ab := A.ForkChild()
+    ab.WithContext(context.TODO())
+    //...
+    bb : = B.ForkChild()
+    bb.DiscardedContext()
+    
+    cc := bb.ForkChild()
+    cc.WithTimeout(context.TODO(), 100*time.Millisecond)
+    
+    //直到所有的group退出，才退出
+    g.Wait()
+    return nil
+}
+```
+
+### 回滚
+
+### 回滚+自由组合和派生，让你复杂的业务变得简单
