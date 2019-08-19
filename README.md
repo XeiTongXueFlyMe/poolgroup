@@ -5,11 +5,13 @@
 
 > 使用 import “github.com/XeiTongXueFlyMe/poolgroup”
 
-##PoolGroup包，分为group and pool。
+## PoolGroup包，分为group and pool。
 
 > group 解决复杂的并发逻辑
 
 > pool 解决高并发量
+
+> group + pool 能解决带有复杂逻辑的高并发 
 
 
 ### 优雅的使用并发
@@ -109,7 +111,7 @@ func main() {
 
 ```
 
-### group上下文组支持Context，用于SOA分布式架构，微服务架构等，,传递链路追踪消息，超时控制，特殊值等。
+### group上下文组支持Context，由于内部派生树，可用于SOA分布式架构，微服务架构等，,传递链路追踪消息，超时控制，特殊值传递等。
 
 ```go
 func (t *calc) IncreasedCtx(ctx context.Context) error {
@@ -151,4 +153,108 @@ func main() {
 	g.Wait()
 }
 
+```
+
+### 如何创建派生树，子group全部退出，父group才退出。group中任何一个协程返回错误，或则panic，其他协程，其他group照样运行
+> 一个简单的派生树
+
+> g 
+>> A
+>>> a
+
+>>> b
+
+>>> c
+
+>> B 
+
+>> C
+
+
+```go
+func main() {
+    g := group.NewGroup()
+    g.Go(func() error { return nil })
+    
+    A := g.ForkChild()
+    A.Go(func() error { return nil })
+    B := g.ForkChild()
+    B.Go(func() error { return nil })
+    C := g.ForkChild()
+    C.Go(func() error { return nil })
+    
+    a := A.ForkChild()
+    a.Go(func() error { return nil })
+    b := A.ForkChild()
+    b.Go(func() error { return nil })
+    c := A.ForkChild()
+    c.Go(func() error { return nil })
+    
+    //直到所有的group退出，才退出
+    g.Wait()
+}
+```
+
+### 如何在派生树中，创建父子关系，像线程一样，父亲down机，其子线程停止运行。
+> 下面代码：
+> group中任何一个协程返回错误，或则panic，本group所有协程退出，其子树全部退出
+```go
+//模拟一个协程运行时发生错误
+func (t *calc) TimeOutErr(ctx context.Context) error {
+    time.Sleep(100 * time.Millisecond)
+    return errors.New("TimeOut")
+}
+
+//out : 所有协程全部退出
+func main() {
+    c := calc{value: 0}
+    
+    g := group.NewGroup()
+    g.WithContext(context.TODO())
+    g.Go(c.IncreasedCtx)
+    g.Go(c.TimeOutErr)
+    
+    A := g.ForkChild()
+    A.Go(c.IncreasedCtx)
+    B := g.ForkChild()
+    B.Go(c.IncreasedCtx)
+    
+    a := A.ForkChild()
+    a.Go(c.IncreasedCtx)
+    b := A.ForkChild()
+    b.Go(c.IncreasedCtx)
+    b.Go(c.IncreasedCtx)
+    
+    //直到所有的group退出，才退出
+    g.Wait()
+    fmt.Println("所有协程全部退出")
+    return nil
+}
+```
+
+### 如何在派生树中，创建父子关系后，希望父down机，某个子及其子树不受影响。
+> 如下示例，g组中某个协程返回错误，或则panic， B组及其子树全部退出，但是A组及其子树（a,b）不退出（除非自己安全退出）
+```go
+func main() {
+    c := calc{value: 0}
+    
+    g := group.NewGroup()
+    g.WithContext(context.TODO())
+    //...
+    
+    A := g.ForkChild()
+    A.DiscardedContext()
+    //...
+    B := g.ForkChild()
+    //...
+    
+    a := A.ForkChild()
+    //...
+    b := A.ForkChild()
+    //...
+    
+    //直到所有的group退出，才退出
+    g.Wait()
+    return nil
+}
 ```

@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-func example_1() {
+func example_1() error {
 	g := group.NewGroup()
 
 	g.Go(func() error { return errors.New("hi, i am Task_1") })
@@ -18,13 +18,15 @@ func example_1() {
 
 	//阻塞，直到本组中所有的协程都安全的退出
 	g.Wait()
+
+	return nil
 }
 
 func fPanic() error {
 	panic("The err is unknown")
 }
 
-func example_2() {
+func example_2() error {
 	g := group.NewGroup()
 
 	g.Go(fPanic)
@@ -34,6 +36,8 @@ func example_2() {
 	//阻塞，直到本组中所有的协程都安全的退出
 	g.Wait()
 	fmt.Println(g.GetErrs())
+
+	return nil
 }
 
 type calc struct {
@@ -71,6 +75,13 @@ func (t *calc) IncreasedCtx(ctx context.Context) error {
 	}
 	return nil
 }
+
+//模拟一个函数运行时发生错误
+func (t *calc) TimeOutErr(ctx context.Context) error {
+	time.Sleep(100 * time.Millisecond)
+	return errors.New("TimeOut")
+}
+
 func (t *calc) PrintValueCtx(ctx context.Context) error {
 	for {
 		time.Sleep(200 * time.Millisecond)
@@ -83,7 +94,7 @@ func (t *calc) PrintValueCtx(ctx context.Context) error {
 	}
 }
 
-func example_3() {
+func example_3() error {
 	c := calc{value: 0}
 
 	g := group.NewGroup()
@@ -92,8 +103,10 @@ func example_3() {
 	g.Go(func() error { return nil })
 
 	g.Wait()
+
+	return nil
 }
-func example_4() {
+func example_4() error {
 	c := calc{value: 0}
 
 	g := group.NewGroup()
@@ -103,46 +116,64 @@ func example_4() {
 	g.Go(c.PrintValueCtx)
 
 	g.Wait()
+
+	return nil
 }
 
-//func main() {
-//	ctx := context.TODO()
-//	cc, c := context.WithCancel(ctx)
-//	ccc := cc
-//	go func() {
-//		<-cc.Done()
-//		fmt.Print("1")
-//	}()
-//	go func() {
-//		<-ccc.Done()
-//		fmt.Print("2")
-//	}()
-//
-//	c()
-//	time.Sleep(100 * time.Microsecond)
-//}
+func example_5() error {
+	g := group.NewGroup()
+	g.Go(func() error { return nil })
 
-//var rollback chan int
-//rollback = make(chan int, 3)
-//rollback <- 2
-//rollback <- 2
-//rollback <- 2
-//go func() {
-//	for {
-//		select {
-//		case <-rollback:
-//			fmt.Println("rollback")
-//			continue
-//		default:
-//			fmt.Println("default")
-//		}
-//		break
-//	}
-//}()
+	A := g.ForkChild()
+	A.Go(func() error { return nil })
+	B := g.ForkChild()
+	B.Go(func() error { return nil })
+	C := g.ForkChild()
+	C.Go(func() error { return nil })
+
+	a := A.ForkChild()
+	a.Go(func() error { return nil })
+	b := A.ForkChild()
+	b.Go(func() error { return nil })
+	c := A.ForkChild()
+	c.Go(func() error { return nil })
+
+	g.Wait()
+	return nil
+}
+
+func example_6() error {
+	c := calc{value: 0}
+
+	g := group.NewGroup()
+	g.WithContext(context.TODO())
+	g.Go(c.IncreasedCtx)
+	g.Go(c.TimeOutErr)
+
+	A := g.ForkChild()
+	A.Go(c.IncreasedCtx)
+	B := g.ForkChild()
+	B.Go(c.IncreasedCtx)
+
+	a := A.ForkChild()
+	a.Go(c.IncreasedCtx)
+	b := A.ForkChild()
+	b.Go(c.IncreasedCtx)
+	b.Go(c.IncreasedCtx)
+
+	g.Wait()
+	fmt.Println("所有协程全部退出")
+	return nil
+}
 
 func main() {
-	example_1()
-	example_2()
-	example_3()
-	example_4()
+	g := group.NewGroup()
+	g.Go(example_1)
+	g.Go(example_2)
+	g.Go(example_3)
+	g.Go(example_4)
+	g.Go(example_5)
+	g.Go(example_6)
+
+	g.Wait()
 }
