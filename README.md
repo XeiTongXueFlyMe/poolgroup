@@ -21,14 +21,14 @@
 import "github.com/XeiTongXueFlyMe/poolgroup/group"
 
 func main(){
-	g := group.NewGroup()
-
-	g.Go(func() error { return errors.New("hi, i am Task_1") })
-	g.Go(func() error { return errors.New("hi, i am Task_2") })
-	g.Go(func() error { return errors.New("hi, i am Task_3") })
-
-	//阻塞，直到本组中所有的协程都安全的退出
-	g.Wait()
+    g := group.NewGroup()
+    
+    g.Go(func() error { return errors.New("hi, i am Task_1") })
+    g.Go(func() error { return errors.New("hi, i am Task_2") })
+    g.Go(func() error { return errors.New("hi, i am Task_3") })
+    
+    //阻塞，直到本组中所有的协程都安全的退出
+    g.Wait()
 }
 
 ```
@@ -63,14 +63,14 @@ func fPanic() error {
 }
 //out: [runtime err The err is unknown]
 func main(){
-	g := group.NewGroup()
-
-	g.Go(fPanic)
-	g.Go(func() error { return nil })
-	g.Go(func() error { return errors.New("runtime err") })
-
-	g.Wait()
-	fmt.Println(g.GetErrs())
+    g := group.NewGroup()
+    
+    g.Go(fPanic)
+    g.Go(func() error { return nil })
+    g.Go(func() error { return errors.New("runtime err") })
+    
+    g.Wait()
+    fmt.Println(g.GetErrs())
 }
 
 ```
@@ -81,32 +81,32 @@ func main(){
 
 ```go
 type calc struct {
-	value int
-	m     sync.Mutex
+    value int
+    m     sync.Mutex
 }
 
 func (t *calc) Increased() error {
-	t.m.Lock()
-	defer t.m.Unlock()
-	t.value++
-	return nil
+    t.m.Lock()
+    defer t.m.Unlock()
+    t.value++
+    return nil
 }
 func (t *calc) PrintValue() error {
-	t.m.Lock()
-	defer t.m.Unlock()
-	fmt.Println(t.value)
-	return nil
+    t.m.Lock()
+    defer t.m.Unlock()
+    fmt.Println(t.value)
+    return nil
 }
 
 func main() {
-	c := calc{value: 0}
-
-	g := group.NewGroup()
-	g.Go(c.Increased)
-	g.Go(c.PrintValue)
-	g.Go(func() error { return nil })
-
-	g.Wait()
+    c := calc{value: 0}
+    
+    g := group.NewGroup()
+    g.Go(c.Increased)
+    g.Go(c.PrintValue)
+    g.Go(func() error { return nil })
+    
+    g.Wait()
 }
 
 ```
@@ -115,42 +115,44 @@ func main() {
 
 ```go
 func (t *calc) IncreasedCtx(ctx context.Context) error {
-	for {
-		time.Sleep(100 * time.Millisecond)
-		select {
-		case <-ctx.Done():
-		default:
-		}
-		t.m.Lock()
-		t.value++
-		t.m.Unlock()
-		if t.value > 2 {
-			return nil
-		}
-	}
-	return nil
+    for {
+        time.Sleep(1 * time.Second)
+        select {
+        case <-ctx.Done():
+        	return nil
+        default:
+        }
+        t.m.Lock()
+        t.value++
+        t.m.Unlock()
+    }
+    return nil
 }
 func (t *calc) PrintValueCtx(ctx context.Context) error {
-	for {
-		time.Sleep(200 * time.Millisecond)
-		select {
-		case <-ctx.Done():
-		default:
-		}
-		fmt.Println(t.value)
-		return nil
-	}
+for {
+    time.Sleep(1 * time.Second)
+    select {
+    case <-ctx.Done():
+    	return nil
+    default:
+    }
+    t.m.Lock()
+    fmt.Println(t.value)
+    t.m.Unlock()
+    return nil
+}
 }
 func main() {
-	c := calc{value: 0}
-
-	g := group.NewGroup()
-	g.WithContext(context.TODO())
-	//g.WithTimeout(context.TODO(), 200*time.Millisecond)
-	g.Go(c.IncreasedCtx)
-	g.Go(c.PrintValueCtx)
-
-	g.Wait()
+    c := calc{value: 0}
+    
+    g := group.NewGroup()
+    g.WithContext(context.TODO())
+    ////10秒后g及其子组中协程全部退出。独立组节点及其子树除外
+    //g.WithTimeout(context.TODO(), 10*time.Second)
+    g.Go(c.IncreasedCtx)
+    g.Go(c.PrintValueCtx)
+    
+    g.Wait()
 }
 
 ```
