@@ -59,7 +59,6 @@ func (t *calc) PrintValue() error {
 }
 
 func (t *calc) IncreasedCtx(ctx context.Context) error {
-
 	for {
 		time.Sleep(100 * time.Millisecond)
 		select {
@@ -73,7 +72,6 @@ func (t *calc) IncreasedCtx(ctx context.Context) error {
 			return nil
 		}
 	}
-	return nil
 }
 
 //模拟一个函数运行时发生错误
@@ -166,6 +164,54 @@ func example_6() error {
 	return nil
 }
 
+type metaData struct {
+	Name       string
+	Ext        string
+	createTime int64
+}
+type db struct {
+	file []metaData
+}
+
+func (db *db) AddFile(ctx context.Context) error {
+	db.file = append(db.file, metaData{
+		Name:       "golang实战",
+		Ext:        ".pdf",
+		createTime: time.Now().Unix(),
+	})
+	fmt.Println("成功写入golang实战.pdf")
+	//模拟一个错误,由于不可抗拒原因本协程出现错误
+	//panic("直接panic，也是可以的")
+	return errors.New("某个步骤返回错误")
+}
+
+//DelAllFile is  rollback func
+func (db *db) DelAllFile() error {
+	db.file = []metaData{}
+	fmt.Printf("回滚被执行:")
+	fmt.Println(db.file)
+	return nil
+}
+func (db *db) PrintFileMeta(ctx context.Context) error {
+	time.Sleep(100 * time.Millisecond)
+	fmt.Printf("PrintFileMeta:")
+	fmt.Println(db.file)
+	return nil
+}
+
+//out : []
+func example_7() error {
+	c := db{}
+	g := group.NewGroup()
+	g.WithContext(context.TODO())
+	g.Go(c.AddFile, c.DelAllFile)
+	g.Go(c.PrintFileMeta)
+
+	g.Wait()
+
+	return nil
+}
+
 func main() {
 	g := group.NewGroup()
 	g.Go(example_1)
@@ -174,6 +220,8 @@ func main() {
 	g.Go(example_4)
 	g.Go(example_5)
 	g.Go(example_6)
+	g.Go(example_7)
+	g.GetErrs()
 
 	g.Wait()
 }

@@ -60,7 +60,6 @@ func TestGroupPanic(t *testing.T) {
 		defer m.Unlock()
 		counts++
 		panic("panic")
-		return nil
 	}))
 	assert.NoError(t, g.Go(func() error {
 		time.Sleep(300 * time.Millisecond)

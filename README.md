@@ -1,5 +1,5 @@
 # PoolGroup
-# 一个人性化的协程管理包，适用于高并发量，简单，复杂并发逻辑场景。
+# 一个人性化的协程管理包，适用于高并发量，简单，复杂并发业务场景。
 
 > 安装 go get github.com/XeiTongXueFlyMe/poolgroup
 
@@ -38,14 +38,13 @@ func main(){
 * 简单
 * 轻量级
 * panic安全
+* 协程业务回滚
 * 独立组 ( func( ) error )
 * 上下文组( func(ctx context.Context) error )
-* 自由组合和派生。
 * 派生树（父子关系，兄弟关系）
-* 协程业务回滚
-    > 1. 子组触发回滚，其父不回滚
-    > 2. 父组触发回滚,子组树全部产生回滚,其中不带上下文的独立组及其派生的子树不回滚
-    > 3. 在同一个group中，并发协程中某一个协程返回错误,或则panic时，所有协程执行业务回滚
+* 自由组合和派生。
+
+
 
 ### pool的特性
 
@@ -73,6 +72,85 @@ func main(){
     fmt.Println(g.GetErrs())
 }
 
+```
+
+### 协程业务回滚
+> 1. 子组触发回滚，其父不回滚
+> 2. 父组触发回滚,子组树全部产生回滚,其中不带上下文的独立组及其派生的子树不回滚
+> 3. 在同一个group中，并发协程中某一个协程返回错误,或则panic时，所有协程执行业务回滚
+> 4. 协程业务回滚 入口函数为 .(func() error)
+```go
+type metaData struct {
+    Name       string
+    Ext        string
+    createTime int64
+}
+type db struct {
+    file []metaData
+}
+func (db *db) AddFile(ctx context.Context) error {
+    db.file = append(db.file, metaData{
+        Name:       "golang实战",
+        Ext:        ".pdf",
+        createTime: time.Now().Unix(),
+    })
+    fmt.Println("成功写入golang实战.pdf")
+    //模拟一个错误,由于不可抗拒原因本协程出现错误
+    //panic("直接panic，也是可以的")
+    return errors.New("某个步骤返回错误")
+}
+
+//DelAllFile is  rollback func
+func (db *db) DelAllFile() error {
+    db.file = []metaData{}
+    fmt.Printf("回滚被执行:")
+    fmt.Println(db.file)
+    return nil
+}
+func (db *db) PrintFileMeta(ctx context.Context) error {
+    time.Sleep(100 * time.Millisecond)
+    fmt.Printf("PrintFileMeta:")
+    fmt.Println(db.file)
+    return nil
+}
+//out:
+//成功写入golang实战.pdf
+//PrintFileMeta:[{golang实战 .pdf 1566304752}]
+//回滚被执行:[]
+func main(){
+    c := db{}
+    g := group.NewGroup()
+    g.WithContext(context.TODO())
+    g.Go(c.AddFile, c.DelAllFile)
+    g.Go(c.PrintFileMeta)
+    
+    g.Wait()
+    
+    return nil
+}
+
+```
+
+### 关闭一个group
+> 会出发协程业务回滚
+
+```go
+    g.Close()
+```
+
+### 读取派生树整个协程数量
+
+```go
+    g.GetGoroutineNum()
+```
+
+### 获取整个派生树的错误
+
+> 可实时读取错误，并发安全
+
+> g.wait()之后调用，获取本次执行整个派生树的错误
+```go
+    g.GetErrs()
 ```
 
 ### group 支持 .(func() error) 和.(func(ctx context.Context) error)协程运行入口,那么如何安全的向协程中带入参数呢？
@@ -298,6 +376,5 @@ func main() {
 }
 ```
 
-### 回滚
 
 ### 回滚+自由组合和派生，让你复杂的业务变得简单

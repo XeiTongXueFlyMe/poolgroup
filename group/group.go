@@ -149,6 +149,7 @@ func (g *Group) GetErrs() []error {
 func (g *Group) Close() {
 	if (g.ctx != nil) && (g.cancel != nil) {
 		g.cancel()
+		g.isRollback = true
 	}
 	return
 }
