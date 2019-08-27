@@ -14,7 +14,10 @@ func example_1() error {
 
 	g.Go(func() error { return errors.New("hi, i am Task_1") })
 	g.Go(func() error { return errors.New("hi, i am Task_2") })
-	g.Go(func() error { return errors.New("hi, i am Task_3") })
+	e := g.Go(func() error { return errors.New("hi, i am Task_3") })
+	if e != nil {
+		panic(e)
+	}
 
 	//阻塞，直到本组中所有的协程都安全的退出
 	g.Wait()
@@ -212,15 +215,36 @@ func example_7() error {
 	return nil
 }
 
+func myPrintf(a, b string) error {
+	fmt.Println(a, b)
+	return nil
+}
+func example_8() error {
+	a := []string{"h", "i", "m"}
+	b := "immm"
+
+	g := group.NewGroup()
+	for _, v := range a {
+		value := v
+		g.Go(func() error {
+			return myPrintf(value, b)
+		})
+	}
+	g.Wait()
+
+	return nil
+}
+
 func main() {
 	g := group.NewGroup()
-	g.Go(example_1)
-	g.Go(example_2)
-	g.Go(example_3)
-	g.Go(example_4)
-	g.Go(example_5)
-	g.Go(example_6)
-	g.Go(example_7)
+	//g.Go(example_1)
+	//g.Go(example_2)
+	//g.Go(example_3)
+	//g.Go(example_4)
+	//g.Go(example_5)
+	//g.Go(example_6)
+	//g.Go(example_7)
+	g.Go(example_8)
 	g.GetErrs()
 
 	g.Wait()

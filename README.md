@@ -157,34 +157,30 @@ func main(){
 
 *  不建议在ctx带入key&Value传参
 
+> 下面实列将 a,b 参数带入协程
 ```go
-type calc struct {
-    value int
-    m     sync.Mutex
+func myPrintf(a, b string) error {
+	fmt.Println(a, b)
+	return nil
 }
+//out:
+//m immm
+//i immm
+//h immm
+func example_8() error {
+	a := []string{"h", "i", "m"}
+	b := "immm"
 
-func (t *calc) Increased() error {
-    t.m.Lock()
-    defer t.m.Unlock()
-    t.value++
-    return nil
-}
-func (t *calc) PrintValue() error {
-    t.m.Lock()
-    defer t.m.Unlock()
-    fmt.Println(t.value)
-    return nil
-}
+	g := group.NewGroup()
+	for _, v := range a {
+		value := v
+		g.Go(func() error {
+			return myPrintf(value, b)
+		})
+	}
+	g.Wait()
 
-func main() {
-    c := calc{value: 0}
-    
-    g := group.NewGroup()
-    g.Go(c.Increased)
-    g.Go(c.PrintValue)
-    g.Go(func() error { return nil })
-    
-    g.Wait()
+	return nil
 }
 
 ```
