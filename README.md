@@ -15,7 +15,8 @@
 
 
 ### 优雅的使用并发
-> 示例
+> 示例(独立组)
+
 
 ```go
 import "github.com/XeiTongXueFlyMe/poolgroup/group"
@@ -39,8 +40,8 @@ func main(){
 * 轻量级
 * panic安全
 * 协程业务回滚
-* 独立组 ( func( ) error )
-* 上下文组( func(ctx context.Context) error )
+* 独立组   =>  func( ) error
+* 上下文组   =>  func(ctx context.Context) error
 * 派生树（父子关系，兄弟关系）
 * 自由组合和派生。
 
@@ -74,7 +75,7 @@ func main(){
 
 ```
 
-### 协程业务回滚
+### 协程业务回滚(上下文组)
 > 1. 子组触发回滚，其父不回滚
 > 2. 父组触发回滚,子组树全部产生回滚,其中不带上下文的独立组及其派生的子树不回滚
 > 3. 在同一个group中，并发协程中某一个协程返回错误,或则panic时，所有协程执行业务回滚
@@ -121,6 +122,7 @@ func main(){
     c := db{}
     g := group.NewGroup()
     g.WithContext(context.TODO())
+    //g所有协程未返回err或者panic, c.DelAllFile()不会运行
     g.Go(c.AddFile, c.DelAllFile)
     g.Go(c.PrintFileMeta)
     
@@ -132,7 +134,7 @@ func main(){
 ```
 
 ### 关闭一个group
-> 会出发协程业务回滚
+> 会触发协程业务回滚
 
 ```go
     g.Close()
@@ -160,32 +162,32 @@ func main(){
 > 下面实列将 a,b 参数带入协程
 ```go
 func myPrintf(a, b string) error {
-	fmt.Println(a, b)
-	return nil
+    fmt.Println(a, b)
+    return nil
 }
 //out:
 //m immm
 //i immm
 //h immm
 func example_8() error {
-	a := []string{"h", "i", "m"}
-	b := "immm"
-
-	g := group.NewGroup()
-	for _, v := range a {
-		value := v
-		g.Go(func() error {
-			return myPrintf(value, b)
-		})
-	}
-	g.Wait()
-
-	return nil
+    a := []string{"h", "i", "m"}
+    b := "immm"
+    
+    g := group.NewGroup()
+    for _, v := range a {
+        value := v
+        g.Go(func() error {
+            return myPrintf(value, b)
+        })
+    }
+    g.Wait()
+    
+    return nil
 }
 
 ```
 
-### group上下文组支持Context，由于内部派生树，可用于SOA分布式架构，微服务架构等，,传递链路追踪消息，超时控制，特殊值传递等。
+### group上下文组支持Context，用于内部派生树，可用于SOA分布式架构，微服务架构等，,传递链路追踪消息，超时控制，特殊值传递等。
 
 ```go
 func (t *calc) IncreasedCtx(ctx context.Context) error {
