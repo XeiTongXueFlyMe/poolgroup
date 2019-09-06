@@ -37,8 +37,11 @@ func (g *Group) ForkChild() *Group {
 	defer g.m.Unlock()
 
 	child := NewGroup()
-	child.ctx = g.ctx
-	child.cancel = g.cancel
+	if g.ctx != nil {
+		ctx, cancel := context.WithCancel(*g.ctx)
+		child.ctx = &ctx
+		child.cancel = cancel
+	}
 	g.child = append(g.child, child)
 
 	return child

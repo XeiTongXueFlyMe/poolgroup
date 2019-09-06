@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"github.com/stretchr/testify/assert"
-	"runtime"
 	"sync"
 	"testing"
 	"time"
@@ -185,6 +184,12 @@ func (this *class) funcTimeOut(ctx context.Context) error {
 	time.Sleep(300 * time.Millisecond)
 	return errors.New("time out")
 }
+func (this *class) funcComplete(ctx context.Context, cancel context.CancelFunc) error {
+
+	time.Sleep(300 * time.Millisecond)
+	cancel()
+	return nil
+}
 
 func TestGroupWait(t *testing.T) {
 	f := class{}
@@ -349,7 +354,7 @@ func TestGroupGetErrs(t *testing.T) {
 	assert.EqualValues(t, g.GetErrs(), err)
 }
 
-func TestGroupRollback_1(t *testing.T) {
+func TestGroupRollback_0(t *testing.T) {
 	f := class{}
 
 	g := NewGroup()
@@ -365,7 +370,30 @@ func TestGroupRollback_1(t *testing.T) {
 	assert.EqualValues(t, 1, f.b)
 	assert.EqualValues(t, 0, f.c)
 }
+func TestGroupRollback_1(t *testing.T) {
+	f := class{}
 
+	g := NewGroup()
+	g.WithContext(context.TODO())
+	assert.NoError(t, g.Go(f.funcCtxA))
+	assert.NoError(t, g.Go(f.funcCtxA))
+	assert.NoError(t, g.Go(f.funcCtxB))
+	assert.NoError(t, g.Go(f.funcCtxC))
+
+	a := g.ForkChild()
+	assert.NoError(t, a.Go(f.funcCtxA))
+	assert.NoError(t, a.Go(f.funcCtxA, f.funcResetA))
+	assert.NoError(t, a.Go(f.funcCtxB))
+	assert.NoError(t, a.Go(f.funcCtxC, f.funcResetC))
+
+	a.Close()
+	time.AfterFunc(time.Millisecond*300, g.Close)
+	g.Wait()
+
+	assert.EqualValues(t, 0, f.a)
+	assert.EqualValues(t, 1, f.b)
+	assert.EqualValues(t, 0, f.c)
+}
 func TestGroupRollback_2(t *testing.T) {
 	f := class{}
 
@@ -408,6 +436,9 @@ func TestGroupRollback_3(t *testing.T) {
 	assert.NoError(t, g.Go(f.funcCtxA))
 	assert.NoError(t, g.Go(f.funcCtxB, f.funcResetB))
 	assert.NoError(t, g.Go(f.funcCtxC))
+	assert.NoError(t, g.Go(func(ctx context.Context) error {
+		return f.funcComplete(ctx, g.cancel)
+	}))
 
 	A := g.ForkChild()
 	assert.NoError(t, A.Go(f.funcCtxA))
@@ -426,17 +457,13 @@ func TestGroupRollback_3(t *testing.T) {
 	assert.NoError(t, aa.Go(f.funcCtxA, f.funcResetA))
 	assert.NoError(t, aa.Go(f.funcCtxC))
 
-	time.Sleep(310 * time.Millisecond)
-	runtime.Gosched()
-	g.Close()
-	A.Close()
-	a.Close()
-	aa.Close()
-
+	<-time.After(time.Millisecond * 300)
 	g.Wait()
+
 	assert.EqualValues(t, 0, f.a)
 	assert.EqualValues(t, 2, f.b)
 	assert.EqualValues(t, 0, f.c)
+
 }
 
 func TestGroupRollback_4(t *testing.T) {
@@ -461,11 +488,9 @@ func TestGroupRollback_4(t *testing.T) {
 	assert.NoError(t, a.Go(f.funcCtxA, f.funcResetA))
 	assert.NoError(t, a.Go(f.funcCtxC, f.funcResetC))
 
-	time.Sleep(310 * time.Millisecond)
-	runtime.Gosched()
-	a.Close()
+	time.AfterFunc(time.Millisecond*250, a.Close)
 	g.Wait()
-	assert.EqualValues(t, 4, f.a)
+	assert.EqualValues(t, 5, f.a)
 	assert.EqualValues(t, 2, f.b)
 	assert.EqualValues(t, 3, f.c)
 }
