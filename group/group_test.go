@@ -493,3 +493,36 @@ func TestGroupRollback_4(t *testing.T) {
 	assert.EqualValues(t, 2, f.b)
 	assert.EqualValues(t, 0, f.c)
 }
+
+var count uint64
+var m sync.Mutex
+
+func timeAdd() error {
+	<-time.After(time.Millisecond * 10)
+	m.Lock()
+	defer m.Unlock()
+	count++
+	return nil
+}
+
+func TestGroupMax(t *testing.T) {
+	g := NewGroup()
+	g.SetMaxGoroutine(50)
+	_i := 0
+	time.AfterFunc(time.Millisecond*5, func() {
+		assert.EqualValues(t, uint64(50), g.GetGoroutineNum())
+	})
+	time.AfterFunc(time.Millisecond*15, func() {
+		assert.EqualValues(t, uint64(100), g.GetGoroutineNum())
+	})
+	time.AfterFunc(time.Millisecond*25, func() {
+		assert.EqualValues(t, uint64(150), g.GetGoroutineNum())
+	})
+	for _i < 1000 {
+		g.Go(timeAdd)
+		_i++
+	}
+	g.Wait()
+	assert.EqualValues(t, uint64(1000), g.GetGoroutineNum())
+	assert.EqualValues(t, uint64(1000), count)
+}

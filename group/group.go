@@ -19,7 +19,10 @@ type Group struct {
 	child []*Group
 
 	isUsed     bool
+	max        uint64
 	counter    uint64
+	total      uint64
+	do         chan bool
 	errs       []error
 	m          sync.Mutex
 	wg         sync.WaitGroup
@@ -30,7 +33,7 @@ type Group struct {
 }
 
 func NewGroup() *Group {
-	return &Group{rollback: make(chan func() error, ROLLBACK_MAXNUM)}
+	return &Group{do: make(chan bool), rollback: make(chan func() error, ROLLBACK_MAXNUM)}
 }
 func (g *Group) ForkChild() *Group {
 	g.m.Lock()
@@ -61,6 +64,20 @@ func (g *Group) WithTimeout(ctx context.Context, timeout time.Duration) (c conte
 	c, g.cancel = context.WithTimeout(ctx, timeout)
 	g.ctx = &c
 	return
+}
+
+func (g *Group) SetMaxGoroutine(n uint64) {
+	g.m.Lock()
+	defer g.m.Unlock()
+
+	g.max = n
+}
+
+func (g *Group) GetMaxGoroutine() uint64 {
+	g.m.Lock()
+	defer g.m.Unlock()
+
+	return g.max
 }
 
 func (g *Group) DiscardedContext() {
@@ -105,8 +122,22 @@ func (g *Group) Wait(isParentRollback ...interface{}) []error {
 
 func (g *Group) Go(f interface{}, rollback ...interface{}) error {
 	g.m.Lock()
-	g.isUsed = true
 	g.wg.Add(1)
+	c := g.counter
+	m := g.max
+	g.m.Unlock()
+	for c >= m && m != 0 {
+		<-g.do
+
+		g.m.Lock()
+		c = g.counter
+		m = g.max
+		g.m.Unlock()
+	}
+
+	g.m.Lock()
+	g.isUsed = true
+	g.total++
 	g.counter++
 	g.m.Unlock()
 
@@ -133,7 +164,7 @@ func (g *Group) GetGoroutineNum() uint64 {
 	g.m.Lock()
 	defer g.m.Unlock()
 
-	return n + g.counter
+	return n + g.total
 }
 
 func (g *Group) GetErrs() []error {
@@ -157,6 +188,17 @@ func (g *Group) Close() {
 	return
 }
 
+//
+func (g *Group) counterUpdata() {
+	g.m.Lock()
+	defer g.m.Unlock()
+	g.counter--
+	select {
+	case g.do <- true:
+	default:
+	}
+}
+
 //func (g *Group) f(f func() error) {
 func (g *Group) f(f func() error) {
 	defer g.wg.Done()
@@ -169,6 +211,7 @@ func (g *Group) f(f func() error) {
 	if e := f(); e != nil {
 		g.collectErrs(e)
 	}
+	g.counterUpdata()
 }
 func (g *Group) fWithContext(f func(ctx context.Context) error, rollback ...interface{}) {
 	defer g.wg.Done()
@@ -189,7 +232,7 @@ func (g *Group) fWithContext(f func(ctx context.Context) error, rollback ...inte
 	if e := f(*g.ctx); e != nil {
 		g.collectErrs(e)
 	}
-
+	g.counterUpdata()
 }
 
 func (g *Group) checkCallLogic() {
