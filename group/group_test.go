@@ -135,7 +135,6 @@ func (this *class) funcResetC() error {
 	this.m.Lock()
 	defer this.m.Unlock()
 	this.c = 0
-
 	return nil
 }
 func (this *class) funcCtxA(ctx context.Context) error {
@@ -490,7 +489,7 @@ func TestGroupRollback_4(t *testing.T) {
 
 	time.AfterFunc(time.Millisecond*250, a.Close)
 	g.Wait()
-	assert.EqualValues(t, 5, f.a)
+	assert.EqualValues(t, 0, f.a)
 	assert.EqualValues(t, 2, f.b)
-	assert.EqualValues(t, 3, f.c)
+	assert.EqualValues(t, 0, f.c)
 }

@@ -78,7 +78,7 @@ func (g *Group) Wait(isParentRollback ...interface{}) []error {
 		switch t := b.(type) {
 		case bool:
 			if g.ctx != nil {
-				g.isRollback = t
+				g.isRollback = (t || g.isRollback)
 			}
 		}
 	}
