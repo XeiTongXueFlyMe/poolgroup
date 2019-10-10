@@ -126,14 +126,19 @@ func (g *Group) Go(f interface{}, rollback ...interface{}) error {
 	c := g.counter
 	m := g.max
 	g.m.Unlock()
-	for c >= m && m != 0 {
-		<-g.do
 
-		g.m.Lock()
-		c = g.counter
-		m = g.max
-		g.m.Unlock()
+	//todo:零时方案
+	if c >= m && m != 0 {
+		<-g.do
 	}
+	//for c >= m && m != 0 {
+	//	<-g.do
+	//
+	//	g.m.Lock()
+	//	c = g.counter
+	//	m = g.max
+	//	g.m.Unlock()
+	//}
 
 	g.m.Lock()
 	g.isUsed = true
@@ -210,11 +215,11 @@ func (g *Group) f(f func() error) {
 			g.collectErrs(errors.New(fmt.Sprint(e)))
 		}
 	}()
+	defer g.counterUpdata()
 
 	if e := f(); e != nil {
 		g.collectErrs(e)
 	}
-	g.counterUpdata()
 }
 func (g *Group) fWithContext(f func(ctx context.Context) error, rollback ...interface{}) {
 	defer g.wg.Done()
