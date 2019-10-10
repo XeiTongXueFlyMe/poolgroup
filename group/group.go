@@ -193,10 +193,13 @@ func (g *Group) counterUpdata() {
 	g.m.Lock()
 	defer g.m.Unlock()
 	g.counter--
-	select {
-	case g.do <- true:
-	default:
-	}
+
+	//fixme:临时的方案
+	go func() { g.do <- true }()
+	//select {
+	//case g.do <- true:
+	//default:
+	//}
 }
 
 //func (g *Group) f(f func() error) {
